@@ -1,0 +1,7 @@
+<launch>
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find vertical_slam)/config/config.rviz" required="true" />
+
+    <!-- <node pkg="tf" type="static_transform_publisher" name="base_to_sensor" args="0.0 0.0 0.0 0.0 0.0 0.0 base_link my_frame 100" /> -->
+    
+    <node name="vertical_slam_node" pkg="vertical_slam" type="vertical_slam_node" output="screen" />
+</launch>
