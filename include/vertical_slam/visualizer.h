@@ -43,6 +43,27 @@ class Visualizer {
     pc_sub_ = n_.subscribe("/kitti/velo/pointcloud", 1, &Visualizer::GrabPC, this);
   }
 
+  void GrabPC(const sensor_msgs::PointCloud2& input) {
+    ResetMarker();
+    // convet input to xyz
+    pcl::PointCloud<pcl::PointXYZ>::Ptr ptr_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::fromROSMsg(input, *ptr_cloud);
+
+    // voxelization
+    pcl::PointCloud<pcl::PointXYZ>::Ptr ptr_voxelized(new pcl::PointCloud<pcl::PointXYZ>);
+    SetIndexVector(*ptr_cloud, voxel_size);
+    Voxelize(*ptr_cloud, *ptr_voxelized, voxel_size, min_points_per_voxel);
+
+    // line extraction
+    std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>> lines;
+    ExtractLine(*ptr_voxelized, lines);
+
+    // visualization
+    VisualizeVoxel(*ptr_voxelized, voxel_size);
+    VisualizeLine(lines);
+    VisualizeLineDensity(lines, voxel_size);
+  }
+
   void ResetMarker() {
     visualization_msgs::MarkerArray marker_array;
     visualization_msgs::Marker deleteall_marker;
@@ -107,13 +128,9 @@ class Visualizer {
     output.points.reserve(total);
     for (int first_idx : first_indices_vector) {
       // unhashing
-      // double x = (index_vector[first_idx].idx & 0x000003FF) * voxel_size;
-      // double y = ((index_vector[first_idx].idx & 0x000FFC00) >> 10) * voxel_size;
-      // double z = ((index_vector[first_idx].idx & 0x3FF00000) >> 20) * voxel_size;
-
-      double x = round(input.points[index_vector[first_idx].cloud_point_index].x / voxel_size) * voxel_size;
-      double y = round(input.points[index_vector[first_idx].cloud_point_index].y / voxel_size) * voxel_size;
-      double z = round(input.points[index_vector[first_idx].cloud_point_index].z / voxel_size) * voxel_size;
+      double x = (int((index_vector[first_idx].idx & 0x3FF00000) >> 20) - (512 - 1)) * voxel_size;
+      double y = (int((index_vector[first_idx].idx & 0x000FFC00) >> 10) - (512 - 1)) * voxel_size;
+      double z = (int(index_vector[first_idx].idx & 0x000003FF) - (512 - 1)) * voxel_size;
 
       output.points.emplace_back(x, y, z);
     }
@@ -352,26 +369,5 @@ class Visualizer {
       marker_array.markers.push_back(marker);
     }
     line_density_pub_.publish(marker_array);
-  }
-
-  void GrabPC(const sensor_msgs::PointCloud2& input) {
-    ResetMarker();
-    // convet input to xyz
-    pcl::PointCloud<pcl::PointXYZ>::Ptr ptr_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::fromROSMsg(input, *ptr_cloud);
-
-    // voxelization
-    pcl::PointCloud<pcl::PointXYZ>::Ptr ptr_voxelized(new pcl::PointCloud<pcl::PointXYZ>);
-    SetIndexVector(*ptr_cloud, voxel_size);
-    Voxelize(*ptr_cloud, *ptr_voxelized, voxel_size, min_points_per_voxel);
-
-    // line extraction
-    std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>> lines;
-    ExtractLine(*ptr_voxelized, lines);
-
-    // visualization
-    VisualizeVoxel(*ptr_voxelized, voxel_size);
-    VisualizeLine(lines);
-    VisualizeLineDensity(lines, voxel_size);
   }
 };
