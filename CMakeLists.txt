@@ -10,6 +10,7 @@ project(vertical_slam)
 find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   pcl_ros
+  nav_msgs
   roscpp
   sensor_msgs
   visualization_msgs
@@ -125,6 +126,7 @@ include_directories(
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
   src/feature_extractor.cpp
+  src/HeightGrid.cpp
 )
 
 ## Add cmake target dependencies of the library

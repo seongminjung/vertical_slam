@@ -100,7 +100,7 @@ Visualization Manager:
       Marker Topic: /visualization_marker/line_density
       Name: MarkerArray
       Namespaces:
-        line_density: true
+        {}
       Queue Size: 100
       Value: true
   Enabled: true

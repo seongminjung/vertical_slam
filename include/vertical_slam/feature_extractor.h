@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#include "vertical_slam/HeightGrid.h"
+
 struct cloud_point_index_idx {
   unsigned int idx;
   unsigned int cloud_point_index;
@@ -34,6 +36,8 @@ class FeatureExtractor {
   std::vector<voxel_index_idx> v_index_vector;      // Storage for mapping leaf and pointcloud indexes
   double voxel_size = 0.2;
   unsigned int min_points_per_voxel = 2;
+  // HeightGrid first_height_grid;
+  // HeightGrid second_height_grid;
 
  public:
   FeatureExtractor() {
@@ -62,6 +66,12 @@ class FeatureExtractor {
     VisualizeVoxel(*ptr_voxelized, voxel_size);
     VisualizeLine(lines);
     VisualizeLineDensity(lines, voxel_size);
+
+    // if (first_height_grid.GetCells().size() == 0) {
+    //   first_height_grid = GetHeightGrid(lines, voxel_size);
+    // } else if (second_height_grid.GetCells().size() == 0) {
+    //   second_height_grid = GetHeightGrid(lines, voxel_size);
+    // }
   }
 
   void SetIndexVector(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
@@ -76,5 +86,7 @@ class FeatureExtractor {
   void VisualizeVoxel(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
   void VisualizeLine(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines);
   void VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
+  HeightGrid GetHeightGrid(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
+
   void HSVtoRGB(int h, int s, int v, int& r, int& g, int& b);
 };

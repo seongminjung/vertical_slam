@@ -9,6 +9,8 @@
 
 #include <vector>
 
+#include "vertical_slam/HeightGrid.h"
+
 void FeatureExtractor::ResetMarker() {
   visualization_msgs::MarkerArray marker_array;
   visualization_msgs::Marker deleteall_marker;
@@ -315,4 +317,29 @@ void FeatureExtractor::VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ,
     marker_array.markers.push_back(marker);
   }
   line_density_pub_.publish(marker_array);
+}
+
+HeightGrid FeatureExtractor::GetHeightGrid(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines,
+                                           double voxel_size) {
+  HeightGrid hg(ros::Time::now().toSec(), voxel_size, 1024, 1024);
+  std::vector<Cell> cells;
+
+  for (int i = 0; i < lines.size(); i++) {
+    double x = lines[i].first.x;
+    double y = lines[i].first.y;
+    double z1 = lines[i].first.z;
+    double z2 = lines[i].second.z;
+
+    // line in the same voxel
+    if (lines[i + 1].first.x == x && lines[i + 1].first.y == y) {
+      z2 += lines[i + 1].second.z - lines[i + 1].first.z;
+      i++;
+    }
+
+    cells.emplace_back(x, y, z2 - z1);
+  }
+
+  hg.SetCells(cells);
+
+  return hg;
 }
