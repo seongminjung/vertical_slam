@@ -1,6 +1,8 @@
 #ifndef HEIGHT_GRID_H
 #define HEIGHT_GRID_H
 
+#include <nav_msgs/OccupancyGrid.h>
+
 #include <ctime>
 #include <vector>
 
@@ -36,6 +38,8 @@ class HeightGrid {
   unsigned int GetWidth();
   unsigned int GetHeight();
   std::vector<Cell> GetCells();
+
+  nav_msgs::OccupancyGrid ToOccupancyGrid();
 };
 
 #endif

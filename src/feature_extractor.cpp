@@ -1,6 +1,7 @@
 #include "vertical_slam/feature_extractor.h"
 
 #include <geometry_msgs/Point.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
@@ -21,6 +22,7 @@ void FeatureExtractor::ResetMarker() {
   point_pub_.publish(marker_array);
   line_pub_.publish(marker_array);
   line_density_pub_.publish(marker_array);
+  height_grid_pub_.publish(marker_array);
   marker_array.markers.clear();
 }
 
@@ -319,8 +321,8 @@ void FeatureExtractor::VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ,
   line_density_pub_.publish(marker_array);
 }
 
-HeightGrid FeatureExtractor::GetHeightGrid(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines,
-                                           double voxel_size) {
+HeightGrid FeatureExtractor::GetHeightGridFromLines(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines,
+                                                    double voxel_size) {
   HeightGrid hg(ros::Time::now().toSec(), voxel_size, 1024, 1024);
   std::vector<Cell> cells;
 
@@ -342,4 +344,63 @@ HeightGrid FeatureExtractor::GetHeightGrid(std::vector<std::pair<pcl::PointXYZ, 
   hg.SetCells(cells);
 
   return hg;
+}
+
+void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid) {
+  visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::Marker marker;
+
+  for (int i = 0; i < height_grid.GetCells().size(); i++) {
+    double x = height_grid.GetCells()[i].x;
+    double y = height_grid.GetCells()[i].y;
+    double height = height_grid.GetCells()[i].height;
+
+    marker = visualization_msgs::Marker();
+    // Set the frame ID and timestamp.
+    marker.header.frame_id = "velo_link";
+    marker.header.stamp = ros::Time(height_grid.GetTimestamp());
+    // Set the namespace and id for this marker. This serves to create a unique ID Any marker sent with the same
+    // namespace and id will overwrite the old one
+    marker.ns = "height_grid";
+    marker.id = i;
+    // Set the marker type. Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
+    marker.type = visualization_msgs::Marker::CUBE;
+    // Set the marker action. Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
+    marker.action = visualization_msgs::Marker::ADD;
+    // Set the pose of the marker. This is a full 6DOF pose relative to the frame/time specified in the header
+    marker.pose.position.x = x;
+    marker.pose.position.y = y;
+    marker.pose.position.z = -1.73;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+
+    // Set the scale of the marker -- 1x1x1 here means 1m on a side
+    marker.scale.x = height_grid.GetResolution();
+    marker.scale.y = height_grid.GetResolution();
+    marker.scale.z = 0.001;
+
+    int h = height * 255 / height_grid.GetResolution() / 20;
+    int s = 255;
+    int v = 255;
+    int r = 0, g = 0, b = 0;
+    HSVtoRGB(h, s, v, r, g, b);
+
+    marker.color.r = r / 255.0;
+    marker.color.g = g / 255.0;
+    marker.color.b = b / 255.0;
+    marker.color.a = 0.5;
+
+    marker.lifetime = ros::Duration();
+
+    marker_array.markers.push_back(marker);
+  }
+
+  height_grid_pub_.publish(marker_array);
+}
+
+void FeatureExtractor::VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid) {
+  nav_msgs::OccupancyGrid grid = height_grid.ToOccupancyGrid();
+  height_grid_occ_pub_.publish(grid);
 }

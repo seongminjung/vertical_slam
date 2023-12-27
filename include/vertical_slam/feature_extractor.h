@@ -31,19 +31,23 @@ class FeatureExtractor {
   ros::Publisher point_pub_;
   ros::Publisher line_pub_;
   ros::Publisher line_density_pub_;
+  ros::Publisher height_grid_pub_;
+  ros::Publisher height_grid_occ_pub_;
   ros::Subscriber pc_sub_;
   std::vector<cloud_point_index_idx> index_vector;  // Storage for mapping leaf and pointcloud indexes
   std::vector<voxel_index_idx> v_index_vector;      // Storage for mapping leaf and pointcloud indexes
   double voxel_size = 0.2;
   unsigned int min_points_per_voxel = 2;
-  // HeightGrid first_height_grid;
-  // HeightGrid second_height_grid;
+  HeightGrid first_height_grid;
+  HeightGrid second_height_grid;
 
  public:
   FeatureExtractor() {
     point_pub_ = n_.advertise<visualization_msgs::MarkerArray>("/visualization_marker/point", 1);
     line_pub_ = n_.advertise<visualization_msgs::MarkerArray>("/visualization_marker/line", 1);
     line_density_pub_ = n_.advertise<visualization_msgs::MarkerArray>("/visualization_marker/line_density", 1);
+    height_grid_pub_ = n_.advertise<visualization_msgs::MarkerArray>("/visualization_marker/height_grid", 1);
+    height_grid_occ_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("/visualization_marker/height_grid_occ", 1);
     pc_sub_ = n_.subscribe("/kitti/velo/pointcloud", 1, &FeatureExtractor::GrabPC, this);
   }
 
@@ -68,10 +72,12 @@ class FeatureExtractor {
     VisualizeLineDensity(lines, voxel_size);
 
     // if (first_height_grid.GetCells().size() == 0) {
-    //   first_height_grid = GetHeightGrid(lines, voxel_size);
+    first_height_grid = GetHeightGridFromLines(lines, voxel_size);
     // } else if (second_height_grid.GetCells().size() == 0) {
-    //   second_height_grid = GetHeightGrid(lines, voxel_size);
+    //   second_height_grid = GetHeightGridFromLines(lines, voxel_size);
     // }
+    VisualizeHeightGrid(first_height_grid);
+    VisualizeHeightGridInOccupancyGrid(first_height_grid);
   }
 
   void SetIndexVector(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
@@ -86,7 +92,9 @@ class FeatureExtractor {
   void VisualizeVoxel(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
   void VisualizeLine(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines);
   void VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
-  HeightGrid GetHeightGrid(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
+  HeightGrid GetHeightGridFromLines(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
+  void VisualizeHeightGrid(HeightGrid& height_grid);
+  void VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid);
 
   void HSVtoRGB(int h, int s, int v, int& r, int& g, int& b);
 };
