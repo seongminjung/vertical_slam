@@ -9,6 +9,15 @@ HeightGrid::HeightGrid() {}
 HeightGrid::HeightGrid(time_t timestamp, double resolution, unsigned int width, unsigned int height)
     : timestamp_(timestamp), resolution_(resolution), width_(width), height_(height) {}
 
+// copy constructor
+HeightGrid::HeightGrid(const HeightGrid& other) {
+  timestamp_ = other.timestamp_;
+  resolution_ = other.resolution_;
+  width_ = other.width_;
+  height_ = other.height_;
+  cells_ = other.cells_;
+}
+
 HeightGrid::~HeightGrid() {}
 
 /////////////////////////////////////////
@@ -34,6 +43,8 @@ unsigned int HeightGrid::GetHeight() { return height_; }  // height of the map i
 std::vector<Cell> HeightGrid::GetCells() { return cells_; }
 /////////////////////////////////////////
 /////////////////////////////////////////
+
+void HeightGrid::UpdateOneCell(unsigned int index, Cell cell) { cells_[index] = cell; }
 
 nav_msgs::OccupancyGrid HeightGrid::ToOccupancyGrid() {
   nav_msgs::OccupancyGrid grid;

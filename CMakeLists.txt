@@ -16,6 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
 )
 
+find_package(Eigen3)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -153,6 +155,7 @@ add_executable(${PROJECT_NAME}_node src/vertical_slam_node.cpp)
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
   ${PROJECT_NAME}
+  Eigen3::Eigen
 )
 
 #############

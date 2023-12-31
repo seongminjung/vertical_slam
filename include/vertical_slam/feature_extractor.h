@@ -52,7 +52,7 @@ class FeatureExtractor {
   }
 
   void GrabPC(const sensor_msgs::PointCloud2& input) {
-    ResetMarker();
+    // ResetMarker();
     // convet input to xyz
     pcl::PointCloud<pcl::PointXYZ>::Ptr ptr_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::fromROSMsg(input, *ptr_cloud);
@@ -67,17 +67,19 @@ class FeatureExtractor {
     ExtractLine(*ptr_voxelized, lines);
 
     // visualization
-    VisualizeVoxel(*ptr_voxelized, voxel_size);
-    VisualizeLine(lines);
-    VisualizeLineDensity(lines, voxel_size);
+    // VisualizeVoxel(*ptr_voxelized, voxel_size);
+    // VisualizeLine(lines);
+    // VisualizeLineDensity(lines, voxel_size);
 
-    // if (first_height_grid.GetCells().size() == 0) {
-    first_height_grid = GetHeightGridFromLines(lines, voxel_size);
-    // } else if (second_height_grid.GetCells().size() == 0) {
-    //   second_height_grid = GetHeightGridFromLines(lines, voxel_size);
-    // }
-    VisualizeHeightGrid(first_height_grid);
-    VisualizeHeightGridInOccupancyGrid(first_height_grid);
+    if (first_height_grid.GetCells().size() == 0) {
+      first_height_grid = GetHeightGridFromLines(lines, voxel_size);
+      VisualizeHeightGrid(first_height_grid, 0);
+    } else if (second_height_grid.GetCells().size() == 0) {
+      second_height_grid = GetHeightGridFromLines(lines, voxel_size);
+      VisualizeHeightGrid(second_height_grid, 1);
+      RunICP(first_height_grid, second_height_grid);
+    }
+    // VisualizeHeightGridInOccupancyGrid(first_height_grid);
   }
 
   void SetIndexVector(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
@@ -88,13 +90,25 @@ class FeatureExtractor {
   void ExtractLine(pcl::PointCloud<pcl::PointXYZ>& v_input,
                    std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& output);
 
+  ////////////////////////////////////
+  ////////// HeightGrid ICP //////////
+  HeightGrid GetHeightGridFromLines(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
+  Point GetCentroid(HeightGrid& height_grid);
+  Point GetCentroidWithoutHeight(HeightGrid& height_grid);
+  void DemeanHeightGrid(HeightGrid& height_grid_in, HeightGrid& height_grid_out, Point centroid);
+  void RunICP(HeightGrid& first_height_grid, HeightGrid& second_height_grid);
+  Eigen::Matrix3d FindAlignment(HeightGrid& new_P, std::vector<Cell>& Y);
+
+  ///////////////////////////////////
+  ////////// Visualization //////////
   void ResetMarker();
   void VisualizeVoxel(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
   void VisualizeLine(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines);
   void VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
-  HeightGrid GetHeightGridFromLines(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
-  void VisualizeHeightGrid(HeightGrid& height_grid);
+  void VisualizeHeightGrid(HeightGrid& height_grid, int color);  // 0: red, 1: green
   void VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid);
+  ///////////////////////////////////
+  ///////////////////////////////////
 
   void HSVtoRGB(int h, int s, int v, int& r, int& g, int& b);
 };

@@ -6,6 +6,13 @@
 #include <ctime>
 #include <vector>
 
+struct Point {
+  double x;
+  double y;
+  Point() {}
+  Point(double x_, double y_) : x(x_), y(y_) {}
+};
+
 struct Cell {
   double x;
   double y;
@@ -25,6 +32,7 @@ class HeightGrid {
  public:
   HeightGrid();
   HeightGrid(time_t timestamp, double resolution, unsigned int width, unsigned int height);
+  HeightGrid(const HeightGrid& other);  // copy constructor
   ~HeightGrid();
 
   void SetTimestamp(time_t timestamp);
@@ -38,6 +46,8 @@ class HeightGrid {
   unsigned int GetWidth();
   unsigned int GetHeight();
   std::vector<Cell> GetCells();
+
+  void UpdateOneCell(unsigned int index, Cell cell);
 
   nav_msgs::OccupancyGrid ToOccupancyGrid();
 };

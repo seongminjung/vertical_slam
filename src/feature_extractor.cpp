@@ -8,6 +8,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/MarkerArray.h>
 
+#include <eigen3/Eigen/Core>
 #include <vector>
 
 #include "vertical_slam/HeightGrid.h"
@@ -272,7 +273,7 @@ void FeatureExtractor::VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ,
     double z1 = lines[i].first.z;
     double z2 = lines[i].second.z;
 
-    // line in the same voxel
+    // line in the same cell
     if (lines[i + 1].first.x == x && lines[i + 1].first.y == y) {
       z2 += lines[i + 1].second.z - lines[i + 1].first.z;
       i++;
@@ -332,7 +333,7 @@ HeightGrid FeatureExtractor::GetHeightGridFromLines(std::vector<std::pair<pcl::P
     double z1 = lines[i].first.z;
     double z2 = lines[i].second.z;
 
-    // line in the same voxel
+    // line in the same cell
     if (lines[i + 1].first.x == x && lines[i + 1].first.y == y) {
       z2 += lines[i + 1].second.z - lines[i + 1].first.z;
       i++;
@@ -346,7 +347,7 @@ HeightGrid FeatureExtractor::GetHeightGridFromLines(std::vector<std::pair<pcl::P
   return hg;
 }
 
-void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid) {
+void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid, int color) {
   visualization_msgs::MarkerArray marker_array;
   visualization_msgs::Marker marker;
 
@@ -361,7 +362,13 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid) {
     marker.header.stamp = ros::Time(height_grid.GetTimestamp());
     // Set the namespace and id for this marker. This serves to create a unique ID Any marker sent with the same
     // namespace and id will overwrite the old one
-    marker.ns = "height_grid";
+    if (color == 0) {
+      marker.ns = "height_grid_0";
+    } else if (color == 1) {
+      marker.ns = "height_grid_1";
+    } else if (color == 2) {
+      marker.ns = "height_grid_2";
+    }
     marker.id = i;
     // Set the marker type. Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
     marker.type = visualization_msgs::Marker::CUBE;
@@ -381,15 +388,20 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid) {
     marker.scale.y = height_grid.GetResolution();
     marker.scale.z = 0.001;
 
-    int h = height * 255 / height_grid.GetResolution() / 20;
-    int s = 255;
-    int v = 255;
-    int r = 0, g = 0, b = 0;
-    HSVtoRGB(h, s, v, r, g, b);
+    if (color == 0) {
+      marker.color.r = 1;
+      marker.color.g = 0;
+      marker.color.b = 0;
+    } else if (color == 1) {
+      marker.color.r = 0;
+      marker.color.g = 1;
+      marker.color.b = 0;
+    } else if (color == 2) {
+      marker.color.r = 0;
+      marker.color.g = 0;
+      marker.color.b = 1;
+    }
 
-    marker.color.r = r / 255.0;
-    marker.color.g = g / 255.0;
-    marker.color.b = b / 255.0;
     marker.color.a = 0.5;
 
     marker.lifetime = ros::Duration();
@@ -403,4 +415,119 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid) {
 void FeatureExtractor::VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid) {
   nav_msgs::OccupancyGrid grid = height_grid.ToOccupancyGrid();
   height_grid_occ_pub_.publish(grid);
+}
+
+Point FeatureExtractor::GetCentroid(HeightGrid& height_grid) {
+  std::vector<Cell> cells = height_grid.GetCells();
+  double x_sum = 0;
+  double y_sum = 0;
+  double height_sum = 0;
+  for (int i = 0; i < cells.size(); i++) {
+    x_sum += cells[i].x * cells[i].height;
+    y_sum += cells[i].y * cells[i].height;
+    height_sum += cells[i].height;
+  }
+  Point centroid(x_sum / height_sum, y_sum / height_sum);
+  return centroid;
+}
+
+Point FeatureExtractor::GetCentroidWithoutHeight(HeightGrid& height_grid) {
+  std::vector<Cell> cells = height_grid.GetCells();
+  double x_sum = 0;
+  double y_sum = 0;
+  double height_sum = 0;
+  for (int i = 0; i < cells.size(); i++) {
+    x_sum += cells[i].x;
+    y_sum += cells[i].y;
+    height_sum += cells[i].height;
+  }
+  Point centroid(x_sum / cells.size(), y_sum / cells.size());
+  return centroid;
+}
+
+void FeatureExtractor::DemeanHeightGrid(HeightGrid& height_grid_in, HeightGrid& height_grid_out, Point centroid) {
+  std::vector<Cell> cells_in = height_grid_in.GetCells();
+  std::vector<Cell> cells_out;
+  cells_out.reserve(cells_in.size());
+  for (int i = 0; i < cells_in.size(); i++) {
+    cells_out.emplace_back(cells_in[i].x - centroid.x, cells_in[i].y - centroid.y, cells_in[i].height);
+  }
+  height_grid_out.SetTimestamp(height_grid_in.GetTimestamp());
+  height_grid_out.SetResolution(height_grid_in.GetResolution());
+  height_grid_out.SetWidth(height_grid_in.GetWidth());
+  height_grid_out.SetHeight(height_grid_in.GetHeight());
+  height_grid_out.SetCells(cells_out);
+}
+
+void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
+  /// \brief 2D HeightGrid ICP algorithm
+  /// \param M: map HeightGrid
+  /// \param P: incoming HeightGrid to be aligned
+
+  // Initialization
+  double s = 1;                                     // scale
+  Eigen::Matrix2d R = Eigen::Matrix2d::Identity();  // rotation
+  Eigen::Vector2d t = Eigen::Vector2d::Zero();      // translation
+  HeightGrid new_P(P);                              // transformed P
+  int max_iter = 1;
+  double thresh = 1e-5;
+
+  int Nm = M.GetCells().size();
+  int Np = P.GetCells().size();
+  int dim = 3;  // Although we are working in 2D, we use 3D vectors for now
+
+  // Start ICP Loop
+  for (int iter = 0; iter < max_iter; iter++) {
+    std::vector<Cell> Y;
+    Y.reserve(Np);
+
+    // Find the nearest neighbor for each point in P
+    for (int i = 0; i < Np; i++) {
+      double min_dist = 1e10;
+      int min_idx = 0;
+      for (int j = 0; j < Nm; j++) {
+        double dist = sqrt(pow(new_P.GetCells()[i].x - M.GetCells()[j].x, 2) +
+                           pow(new_P.GetCells()[i].y - M.GetCells()[j].y, 2));  // Euclidean distance
+        if (dist < min_dist) {
+          min_dist = dist;
+          min_idx = j;
+        }
+      }
+      Y.emplace_back(M.GetCells()[min_idx].x, M.GetCells()[min_idx].y, new_P.GetCells()[i].height);
+    }
+
+    Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x2: 0,
+                                                       // right bottom 1x1: s
+
+    // Update R, t, s
+    R = result.block<2, 2>(0, 0);
+    t = result.block<2, 1>(0, 2);
+    s = result(2, 2);
+
+    // Update P and compute error
+    double error = 0;
+    for (int i = 0; i < Np; i++) {
+      Eigen::Vector2d new_point = s * R * Eigen::Vector2d(new_P.GetCells()[i].x, new_P.GetCells()[i].y) + t;
+      new_P.UpdateOneCell(i, Cell(new_point(0), new_point(1), new_P.GetCells()[i].height));
+      error += pow(new_point(0) - Y[i].x, 2) + pow(new_point(1) - Y[i].y, 2);
+    }
+    error /= Np;
+
+    // Check for convergence
+    if (error < thresh) {
+      break;
+    }
+
+    // Visualize
+    VisualizeHeightGrid(new_P, 2);
+
+    ROS_INFO("iter: %d, error: %f", iter, error);
+  }
+}
+
+Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& new_P, std::vector<Cell>& Y) {
+  /// \brief Find the alignment between new_P and Y
+  /// \param new_P: transformed P from last iteration
+  /// \param Y: nearest neighbor of each point in P
+  /// \return result: left top 2x2: R, right top 2x1: t, left bottom 1x2: 0, right bottom 1x1: s
 }
