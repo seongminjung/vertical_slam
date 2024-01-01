@@ -468,6 +468,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   double s = 1;                                     // scale
   Eigen::Matrix2d R = Eigen::Matrix2d::Identity();  // rotation
   Eigen::Vector2d t = Eigen::Vector2d::Zero();      // translation
+  double err = 0;                                   // error
   HeightGrid new_P(P);                              // transformed P
   int max_iter = 1;
   double thresh = 1e-5;
@@ -496,32 +497,35 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       Y.emplace_back(M.GetCells()[min_idx].x, M.GetCells()[min_idx].y, new_P.GetCells()[i].height);
     }
 
-    Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x2: 0,
-                                                       // right bottom 1x1: s
+    Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: s,
+                                                       // center bottom 1x1: err
 
-    // Update R, t, s
+    // Update R, t, s, err
     R = result.block<2, 2>(0, 0);
     t = result.block<2, 1>(0, 2);
-    s = result(2, 2);
+    s = result(2, 0);
+    err = result(2, 1);
 
     // Update P and compute error
-    double error = 0;
     for (int i = 0; i < Np; i++) {
-      Eigen::Vector2d new_point = s * R * Eigen::Vector2d(new_P.GetCells()[i].x, new_P.GetCells()[i].y) + t;
-      new_P.UpdateOneCell(i, Cell(new_point(0), new_point(1), new_P.GetCells()[i].height));
-      error += pow(new_point(0) - Y[i].x, 2) + pow(new_point(1) - Y[i].y, 2);
+      Cell new_cell(R(0, 0) * new_P.GetCells()[i].x + R(0, 1) * new_P.GetCells()[i].y + t(0),
+                    R(1, 0) * new_P.GetCells()[i].x + R(1, 1) * new_P.GetCells()[i].y + t(1),
+                    new_P.GetCells()[i].height);
+      new_P.UpdateOneCell(i, new_cell);
+      double e = pow(Y[i].x - new_cell.x, 2) + pow(Y[i].y - new_cell.y, 2);
+      err += e;
     }
-    error /= Np;
+    err /= Np;
 
     // Check for convergence
-    if (error < thresh) {
+    if (err < thresh) {
       break;
     }
 
     // Visualize
     VisualizeHeightGrid(new_P, 2);
 
-    ROS_INFO("iter: %d, error: %f", iter, error);
+    ROS_INFO("iter: %d, err: %f", iter, err);
   }
 }
 
@@ -529,5 +533,5 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& new_P, std::vector<C
   /// \brief Find the alignment between new_P and Y
   /// \param new_P: transformed P from last iteration
   /// \param Y: nearest neighbor of each point in P
-  /// \return result: left top 2x2: R, right top 2x1: t, left bottom 1x2: 0, right bottom 1x1: s
+  /// \return result: left top 2x2: R, right top 2x1: t, left bottom 1x1 s, center bottom 1x1: err
 }
