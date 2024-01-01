@@ -97,7 +97,7 @@ class FeatureExtractor {
   Point GetCentroidWithoutHeight(HeightGrid& height_grid);
   void DemeanHeightGrid(HeightGrid& height_grid_in, HeightGrid& height_grid_out, Point centroid);
   void RunICP(HeightGrid& first_height_grid, HeightGrid& second_height_grid);
-  Eigen::Matrix3d FindAlignment(HeightGrid& new_P, std::vector<Cell>& Y);
+  Eigen::Matrix3d FindAlignment(HeightGrid& P, HeightGrid& Y);
 
   ///////////////////////////////////
   ////////// Visualization //////////

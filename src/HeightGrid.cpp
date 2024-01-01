@@ -32,6 +32,10 @@ void HeightGrid::SetHeight(unsigned int height) { height_ = height; }  // height
 
 void HeightGrid::SetCells(std::vector<Cell> cells) { cells_ = cells; }
 
+void HeightGrid::AppendOneCell(Cell cell) { cells_.push_back(cell); }
+
+void HeightGrid::ReserveCells(unsigned int size) { cells_.reserve(size); }
+
 time_t HeightGrid::GetTimestamp() { return timestamp_; }
 
 double HeightGrid::GetResolution() { return resolution_; }

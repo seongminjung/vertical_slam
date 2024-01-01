@@ -40,6 +40,9 @@ class HeightGrid {
   void SetWidth(unsigned int width);
   void SetHeight(unsigned int height);
   void SetCells(std::vector<Cell> cells);
+  void AppendOneCell(Cell cell);
+
+  void ReserveCells(unsigned int size);
 
   time_t GetTimestamp();
   double GetResolution();
