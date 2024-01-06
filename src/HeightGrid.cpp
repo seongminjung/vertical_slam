@@ -50,6 +50,20 @@ std::vector<Cell> HeightGrid::GetCells() { return cells_; }
 
 void HeightGrid::UpdateOneCell(unsigned int index, Cell cell) { cells_[index] = cell; }
 
+Eigen::MatrixXd HeightGrid::ToEigenMatrix() {
+  Eigen::MatrixXd matrix;
+  matrix.resize(3, cells_.size());
+  matrix.setZero();
+
+  for (int i = 0; i < cells_.size(); i++) {
+    matrix(0, i) = cells_[i].x;
+    matrix(1, i) = cells_[i].y;
+    matrix(2, i) = cells_[i].height;
+  }
+
+  return matrix;
+}
+
 nav_msgs::OccupancyGrid HeightGrid::ToOccupancyGrid() {
   nav_msgs::OccupancyGrid grid;
   grid.header.stamp = ros::Time(timestamp_);

@@ -466,7 +466,6 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   /// \param P: incoming HeightGrid to be aligned
 
   // Initialization
-  double s = 1;                                     // scale
   Eigen::Matrix2d R = Eigen::Matrix2d::Identity();  // rotation
   Eigen::Vector2d t = Eigen::Vector2d::Zero();      // translation
   double err = 0;                                   // error
@@ -476,7 +475,6 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
   int Nm = M.GetCells().size();
   int Np = P.GetCells().size();
-  int dim = 3;  // Although we are working in 2D, we use 3D vectors for now
 
   // Start ICP Loop
   for (int iter = 0; iter < max_iter; iter++) {
@@ -498,19 +496,17 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       Y.AppendOneCell(M.GetCells()[min_idx]);
     }
 
-    Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: s,
-                                                       // center bottom 1x1: err
+    Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
 
-    // Update R, t, s, err
+    // Update R, t, err
     R = result.block<2, 2>(0, 0);
     t = result.block<2, 1>(0, 2);
-    s = result(2, 0);
-    err = result(2, 1);
+    err = result(2, 0);
 
     // Update P and compute error
     for (int i = 0; i < Np; i++) {
-      Cell new_cell(s * R(0, 0) * new_P.GetCells()[i].x + s * R(0, 1) * new_P.GetCells()[i].y + t(0),
-                    s * R(1, 0) * new_P.GetCells()[i].x + s * R(1, 1) * new_P.GetCells()[i].y + t(1),
+      Cell new_cell(R(0, 0) * new_P.GetCells()[i].x + R(0, 1) * new_P.GetCells()[i].y + t(0),
+                    R(1, 0) * new_P.GetCells()[i].x + R(1, 1) * new_P.GetCells()[i].y + t(1),
                     new_P.GetCells()[i].height);
       new_P.UpdateOneCell(i, new_cell);
     }
@@ -525,176 +521,71 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
     ROS_INFO("R: \n%f, %f\n%f, %f", R(0, 0), R(0, 1), R(1, 0), R(1, 1));
     ROS_INFO("t: \n%f\n%f", t(0), t(1));
-    ROS_INFO("s: %f", s);
 
     ROS_INFO("iter: %d, err: %f", iter, err);
   }
 }
 
-Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& P, HeightGrid& Y) {
-  /// \brief Find the alignment between P and Y
-  /// \param P: transformed P from last iteration
-  /// \param Y: nearest neighbor of each point in P
+Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_HG) {
+  /// \brief Find the alignment between X and Y
+  /// \param X_HG: transformed X from last iteration
+  /// \param Y_HG: nearest neighbor of each point in X
   /// \return result: left top 2x2: R, right top 2x1: t, left bottom 1x1 s, center bottom 1x1: err
 
   // Test the inputs
-  if (P.GetCells().size() != Y.GetCells().size()) {
-    ROS_ERROR("P and Y have different sizes!");
+  if (X_HG.GetCells().size() != Y_HG.GetCells().size()) {
+    ROS_ERROR("X and Y have different sizes!");
   }
-  if (P.GetCells().size() < 4) {
+  if (X_HG.GetCells().size() < 4) {
     ROS_ERROR("Need at least four pairs of points!");
   }
 
-  // Initialization
-  int N = P.GetCells().size();
+  unsigned int N = X_HG.GetCells().size();
 
-  // Compute the centroid of P and Y
-  Point Mu_P_Point = GetCentroidWithoutHeight(P);
-  Point Mu_Y_Point = GetCentroidWithoutHeight(Y);
-  Eigen::Vector2d Mu_P(Mu_P_Point.x, Mu_P_Point.y);
-  Eigen::Vector2d Mu_Y(Mu_Y_Point.x, Mu_Y_Point.y);
+  Eigen::MatrixXd X_matrix = X_HG.ToEigenMatrix();
+  Eigen::MatrixXd Y_matrix = Y_HG.ToEigenMatrix();
 
-  // Compute the demeaned P and Y
-  HeightGrid PprimeHG;
-  HeightGrid YprimeHG;
-  DemeanHeightGrid(P, PprimeHG, Mu_P_Point);
-  DemeanHeightGrid(Y, YprimeHG, Mu_Y_Point);
+  // Seperate coordinates and height
+  Eigen::MatrixXd X = X_matrix.block(0, 0, 2, N);
+  Eigen::MatrixXd Y = Y_matrix.block(0, 0, 2, N);
+  Eigen::VectorXd X_height = X_matrix.block(2, 0, 1, N).transpose();
+  Eigen::VectorXd Y_height = Y_matrix.block(2, 0, 1, N).transpose();
 
-  // Convert HeightGrid to Eigen::Matrix
-  Eigen::MatrixXd Pprime;
-  Eigen::MatrixXd Yprime;
-  Pprime.resize(3, N);
-  Yprime.resize(3, N);
+  // Compute the centroid of X and Y, weighted by height
+  Eigen::Vector2d X_centroid = X * X_height / X_height.sum();
+  Eigen::Vector2d Y_centroid = Y * Y_height / Y_height.sum();
 
-  for (int i = 0; i < N; i++) {
-    Pprime(0, i) = PprimeHG.GetCells()[i].x;
-    Pprime(1, i) = PprimeHG.GetCells()[i].y;
-    Yprime(0, i) = YprimeHG.GetCells()[i].x;
-    Yprime(1, i) = YprimeHG.GetCells()[i].y;
-  }
+  // Compute average height of X and Y
+  Eigen::VectorXd Height = (X_height + Y_height) / 2;
 
-  // Compute the optimal quaternion
-  // Eigen::MatrixXd Px: x component of Pprime
-  // Eigen::MatrixXd Py: y component of Pprime
-  // Eigen::MatrixXd Pz: zeros
-  // Eigen::MatrixXd Yx: x component of Yprime
-  // Eigen::MatrixXd Yy: y component of Yprime
-  // Eigen::MatrixXd Yz: zeros
-  Eigen::MatrixXd Px;
-  Eigen::MatrixXd Py;
-  Eigen::MatrixXd Pz;
-  Eigen::MatrixXd Yx;
-  Eigen::MatrixXd Yy;
-  Eigen::MatrixXd Yz;
-  Px.resize(3, N);
-  Py.resize(3, N);
-  Pz.resize(3, N);
-  Yx.resize(3, N);
-  Yy.resize(3, N);
-  Yz.resize(3, N);
+  // Compute the demeaned X and Y
+  Eigen::MatrixXd X_demeaned = X - X_centroid * Eigen::MatrixXd::Ones(1, N);
+  Eigen::MatrixXd Y_demeaned = Y - Y_centroid * Eigen::MatrixXd::Ones(1, N);
 
-  for (int i = 0; i < N; i++) {
-    Px(0, i) = Pprime(0, i);
-    Px(1, i) = 0;
-    Px(2, i) = 0;
-    Py(0, i) = Pprime(1, i);
-    Py(1, i) = 0;
-    Py(2, i) = 0;
-    Pz(0, i) = Pprime(2, i);
-    Pz(1, i) = 0;
-    Pz(2, i) = 0;
-    Yx(0, i) = Yprime(0, i);
-    Yx(1, i) = 0;
-    Yx(2, i) = 0;
-    Yy(0, i) = Yprime(1, i);
-    Yy(1, i) = 0;
-    Yy(2, i) = 0;
-    Yz(0, i) = Yprime(2, i);
-    Yz(1, i) = 0;
-    Yz(2, i) = 0;
-  }
+  // Compute the covariance matrix including height
+  Eigen::Matrix2d H = Y_demeaned * Height.asDiagonal() * X_demeaned.transpose();
+  ROS_INFO("H: \n%f, %f\n%f, %f", H(0, 0), H(0, 1), H(1, 0), H(1, 1));
 
-  // Sum components
-  Eigen::MatrixXd Sxx = Px * Yx.transpose();
-  Eigen::MatrixXd Sxy = Px * Yy.transpose();
-  Eigen::MatrixXd Sxz = Px * Yz.transpose();
-  Eigen::MatrixXd Syx = Py * Yx.transpose();
-  Eigen::MatrixXd Syy = Py * Yy.transpose();
-  Eigen::MatrixXd Syz = Py * Yz.transpose();
-  Eigen::MatrixXd Szx = Pz * Yx.transpose();
-  Eigen::MatrixXd Szy = Pz * Yy.transpose();
-  Eigen::MatrixXd Szz = Pz * Yz.transpose();
+  // Compute the SVD of H
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+  Eigen::Matrix2d U = svd.matrixU();
+  Eigen::Matrix2d V = svd.matrixV();
+  Eigen::Matrix2d R = V * U.transpose();
+  ROS_INFO("R: \n%f, %f\n%f, %f", R(0, 0), R(0, 1), R(1, 0), R(1, 1));
 
-  // Construct the matrix Nmatrix
-  Eigen::MatrixXd Nmatrix = Eigen::MatrixXd::Zero(4, 4);
-  Nmatrix(0, 0) = Sxx.trace() + Syy.trace() + Szz.trace();
-  Nmatrix(0, 1) = Syz.trace() - Szy.trace();
-  Nmatrix(0, 2) = Szx.trace() - Sxz.trace();
-  Nmatrix(0, 3) = Sxy.trace() - Syx.trace();
-  Nmatrix(1, 0) = Nmatrix(0, 1);
-  Nmatrix(1, 1) = Sxx.trace() - Syy.trace() - Szz.trace();
-  Nmatrix(1, 2) = Sxy.trace() + Syx.trace();
-  Nmatrix(1, 3) = Szx.trace() + Sxz.trace();
-  Nmatrix(2, 0) = Nmatrix(0, 2);
-  Nmatrix(2, 1) = Nmatrix(1, 2);
-  Nmatrix(2, 2) = -Sxx.trace() + Syy.trace() - Szz.trace();
-  Nmatrix(2, 3) = Syz.trace() + Szy.trace();
-  Nmatrix(3, 0) = Nmatrix(0, 3);
-  Nmatrix(3, 1) = Nmatrix(1, 3);
-  Nmatrix(3, 2) = Nmatrix(2, 3);
-  Nmatrix(3, 3) = -Sxx.trace() - Syy.trace() + Szz.trace();
-
-  // Find the eigenvector corresponding to the largest eigenvalue
-  Eigen::EigenSolver<Eigen::MatrixXd> es(Nmatrix);
-  Eigen::MatrixXcd eigenvectors = es.eigenvectors();
-  Eigen::VectorXcd eigenvalues = es.eigenvalues();
-
-  // Find the index of the largest eigenvalue
-  int max_idx = 0;
-  double max_val = 0;
-  for (int i = 0; i < 4; i++) {
-    if (eigenvalues(i).real() > max_val) {
-      max_val = eigenvalues(i).real();
-      max_idx = i;
-    }
-  }
-
-  // Find the optimal quaternion
-  Eigen::Vector4d q = eigenvectors.col(max_idx).real();
-
-  // Compute the rotation matrix
-  Eigen::Matrix2d R;
-  R(0, 0) = pow(q(0), 2) + pow(q(1), 2) - pow(q(2), 2) - pow(q(3), 2);
-  R(0, 1) = 2 * (q(1) * q(2) - q(0) * q(3));
-  R(1, 0) = 2 * (q(1) * q(2) + q(0) * q(3));
-  R(1, 1) = pow(q(0), 2) - pow(q(1), 2) + pow(q(2), 2) - pow(q(3), 2);
-
-  // Compute the scale
-  double Sp = 0;
-  double D = 0;
-  for (int i = 0; i < N; i++) {
-    Sp += PprimeHG.GetCells()[i].x * PprimeHG.GetCells()[i].x + PprimeHG.GetCells()[i].y * PprimeHG.GetCells()[i].y;
-    D += YprimeHG.GetCells()[i].x * YprimeHG.GetCells()[i].x + YprimeHG.GetCells()[i].y * YprimeHG.GetCells()[i].y;
-  }
-  double s = sqrt(D / Sp);
-
-  // Compute the translation vector
-  Eigen::Vector2d t = Mu_Y - s * R * Mu_P;
+  // Compute the translation
+  Eigen::Vector2d t = Y_centroid - R * X_centroid;
+  ROS_INFO("t: \n%f\n%f", t(0), t(1));
 
   // Compute the error
-  double err = 0;
-  for (int i = 0; i < N; i++) {
-    double e = pow(P.GetCells()[i].x - Y.GetCells()[i].x, 2) +
-               pow(P.GetCells()[i].y - Y.GetCells()[i].y, 2);  // Sum of squared errors
-    err += e;
-  }
+  double err = (Y_demeaned - R * X_demeaned).norm() / N;
+  ROS_INFO("err: %f", err);
 
-  // Construct the result matrix
-  Eigen::Matrix3d result = Eigen::Matrix3d::Zero();
+  // Construct the result
+  Eigen::Matrix3d result;
   result.block<2, 2>(0, 0) = R;
   result.block<2, 1>(0, 2) = t;
-  result(2, 0) = s;
-  result(2, 1) = err;
+  result(2, 0) = err;
 
   return result;
 }

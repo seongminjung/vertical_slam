@@ -3,6 +3,7 @@
 
 #include <nav_msgs/OccupancyGrid.h>
 
+#include <Eigen/Core>
 #include <ctime>
 #include <vector>
 
@@ -52,6 +53,7 @@ class HeightGrid {
 
   void UpdateOneCell(unsigned int index, Cell cell);
 
+  Eigen::MatrixXd ToEigenMatrix();
   nav_msgs::OccupancyGrid ToOccupancyGrid();
 };
 
