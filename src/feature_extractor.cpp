@@ -403,7 +403,7 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid, int color) {
       marker.color.b = 1;
     }
 
-    marker.color.a = 0.5;
+    marker.color.a = 0.5 * height;
 
     marker.lifetime = ros::Duration();
 
@@ -411,6 +411,68 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid, int color) {
   }
 
   height_grid_pub_.publish(marker_array);
+}
+
+void FeatureExtractor::VisualizeLineBetweenMatchingPoints(HeightGrid HG1, HeightGrid HG2) {
+  visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::Marker marker;
+
+  std::vector<Cell> cells1 = HG1.GetCells();
+  std::vector<Cell> cells2 = HG2.GetCells();
+
+  for (int i = 0; i < cells1.size(); i++) {
+    double x1 = cells1[i].x;
+    double y1 = cells1[i].y;
+    double height1 = cells1[i].height;
+
+    double x2 = cells2[i].x;
+    double y2 = cells2[i].y;
+    double height2 = cells2[i].height;
+
+    marker = visualization_msgs::Marker();
+    // Set the frame ID and timestamp.
+    marker.header.frame_id = "velo_link";
+    marker.header.stamp = ros::Time(HG1.GetTimestamp());
+    // Set the namespace and id for this marker. This serves to create a unique ID Any marker sent with the same
+    // namespace and id will overwrite the old one
+    marker.ns = "line_between_matching_points";
+    marker.id = i;
+    // Set the marker type. Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    // Set the marker action. Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
+    marker.action = visualization_msgs::Marker::ADD;
+    // Set the pose of the marker. only w component is used for LINE_STRIP markers
+    marker.pose.orientation.w = 1.0;
+    // Set the scale of the marker. only x component is used for LINE_STRIP markers
+    marker.scale.x = 0.05;
+
+    int h = 0;
+    int s = 255;
+    int v = 255;
+    int r = 0, g = 0, b = 0;
+    HSVtoRGB(h, s, v, r, g, b);
+
+    marker.color.r = r / 255.0;
+    marker.color.g = g / 255.0;
+    marker.color.b = b / 255.0;
+    marker.color.a = 0.5 * (height1 + height2);
+
+    marker.lifetime = ros::Duration();
+
+    geometry_msgs::Point p1, p2;
+    p1.x = x1;
+    p1.y = y1;
+    p1.z = -1.73;
+    p2.x = x2;
+    p2.y = y2;
+    p2.z = -1.73;
+    marker.points.push_back(p1);
+    marker.points.push_back(p2);
+
+    marker_array.markers.push_back(marker);
+
+    height_grid_pub_.publish(marker_array);
+  }
 }
 
 void FeatureExtractor::VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid) {
@@ -478,6 +540,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
   // Start ICP Loop
   for (int iter = 0; iter < max_iter; iter++) {
+    ROS_INFO("==========iter: %d==========", iter);
     HeightGrid Y;
     Y.ReserveCells(Np);
 
@@ -489,12 +552,18 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
         double dist = sqrt(pow(new_P.GetCells()[i].x - M.GetCells()[j].x, 2) +
                            pow(new_P.GetCells()[i].y - M.GetCells()[j].y, 2));  // Euclidean distance
         if (dist < min_dist) {
-          min_dist = dist;
-          min_idx = j;
+          // Update only when height is similar
+          if (abs(new_P.GetCells()[i].height - M.GetCells()[j].height) < 0.5) {
+            min_dist = dist;
+            min_idx = j;
+          }
         }
       }
       Y.AppendOneCell(M.GetCells()[min_idx]);
     }
+
+    // Visualize
+    VisualizeLineBetweenMatchingPoints(new_P, Y);
 
     Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
 
@@ -511,19 +580,70 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       new_P.UpdateOneCell(i, new_cell);
     }
 
-    // Check for convergence
-    if (err < thresh) {
-      break;
-    }
+    // pause for one second (Only for RunTestICP)
+    // ros::Duration(1).sleep();
 
     // Visualize
     VisualizeHeightGrid(new_P, 2);
 
-    ROS_INFO("R: \n%f, %f\n%f, %f", R(0, 0), R(0, 1), R(1, 0), R(1, 1));
-    ROS_INFO("t: \n%f\n%f", t(0), t(1));
-
-    ROS_INFO("iter: %d, err: %f", iter, err);
+    // Check for convergence
+    if (err < thresh) {
+      VisualizeLineBetweenMatchingPoints(new_P, Y);
+      break;
+    }
   }
+}
+
+void FeatureExtractor::RunTestICP() {
+  HeightGrid X;  // incoming
+  X.SetTimestamp(ros::Time::now().toSec());
+  X.SetResolution(0.2);
+  X.SetWidth(2);
+  X.SetHeight(2);
+  X.ReserveCells(4);
+  X.AppendOneCell(Cell(3, -5, 3));
+  X.AppendOneCell(Cell(2, -5, 3));
+  X.AppendOneCell(Cell(1, -4, 1));
+  X.AppendOneCell(Cell(1, -3, 1));
+  X.AppendOneCell(Cell(2, -2, 2));
+  X.AppendOneCell(Cell(3, -2, 2));
+  X.AppendOneCell(Cell(4, -3, 1));
+  X.AppendOneCell(Cell(4, -4, 1));
+  X.AppendOneCell(Cell(3, 0, 3));
+  X.AppendOneCell(Cell(2, 0, 3));
+  X.AppendOneCell(Cell(1, 1, 1));
+  X.AppendOneCell(Cell(1, 2, 1));
+  X.AppendOneCell(Cell(2, 3, 2));
+  X.AppendOneCell(Cell(3, 3, 2));
+  X.AppendOneCell(Cell(4, 2, 1));
+  X.AppendOneCell(Cell(4, 1, 1));
+  VisualizeHeightGrid(X, 1);
+
+  HeightGrid Y;  // map
+  Y.SetTimestamp(ros::Time::now().toSec());
+  Y.SetResolution(0.2);
+  Y.SetWidth(2);
+  Y.SetHeight(2);
+  Y.ReserveCells(4);
+  Y.AppendOneCell(Cell(0, 0, 1));
+  Y.AppendOneCell(Cell(0, 1, 1));
+  Y.AppendOneCell(Cell(1, 2, 1));
+  Y.AppendOneCell(Cell(2, 2, 1));
+  Y.AppendOneCell(Cell(3, 1, 3));
+  Y.AppendOneCell(Cell(3, 0, 3));
+  Y.AppendOneCell(Cell(2, -1, 1));
+  Y.AppendOneCell(Cell(1, -1, 1));
+  Y.AppendOneCell(Cell(5, 0, 1));
+  Y.AppendOneCell(Cell(5, 1, 1));
+  Y.AppendOneCell(Cell(6, 2, 1));
+  Y.AppendOneCell(Cell(7, 2, 1));
+  Y.AppendOneCell(Cell(8, 1, 3));
+  Y.AppendOneCell(Cell(8, 0, 3));
+  Y.AppendOneCell(Cell(7, -1, 1));
+  Y.AppendOneCell(Cell(6, -1, 1));
+  VisualizeHeightGrid(Y, 0);
+
+  RunICP(Y, X);
 }
 
 Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_HG) {
@@ -563,7 +683,7 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
   Eigen::MatrixXd Y_demeaned = Y - Y_centroid * Eigen::MatrixXd::Ones(1, N);
 
   // Compute the covariance matrix including height
-  Eigen::Matrix2d H = Y_demeaned * Height.asDiagonal() * X_demeaned.transpose();
+  Eigen::Matrix2d H = X_demeaned * Height.asDiagonal() * Y_demeaned.transpose();
   ROS_INFO("H: \n%f, %f\n%f, %f", H(0, 0), H(0, 1), H(1, 0), H(1, 1));
 
   // Compute the SVD of H
@@ -572,6 +692,9 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
   Eigen::Matrix2d V = svd.matrixV();
   Eigen::Matrix2d R = V * U.transpose();
   ROS_INFO("R: \n%f, %f\n%f, %f", R(0, 0), R(0, 1), R(1, 0), R(1, 1));
+  // get angle in degrees from rotation matrix r
+  double angle = atan2(R(1, 0), R(0, 0)) * 180 / M_PI;
+  ROS_INFO("angle: %f", angle);
 
   // Compute the translation
   Eigen::Vector2d t = Y_centroid - R * X_centroid;

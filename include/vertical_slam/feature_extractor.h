@@ -74,6 +74,7 @@ class FeatureExtractor {
     if (first_height_grid.GetCells().size() == 0) {
       first_height_grid = GetHeightGridFromLines(lines, voxel_size);
       VisualizeHeightGrid(first_height_grid, 0);
+      // RunTestICP();
     } else if (second_height_grid.GetCells().size() == 0) {
       second_height_grid = GetHeightGridFromLines(lines, voxel_size);
       VisualizeHeightGrid(second_height_grid, 1);
@@ -97,6 +98,7 @@ class FeatureExtractor {
   Point GetCentroidWithoutHeight(HeightGrid& height_grid);
   void DemeanHeightGrid(HeightGrid& height_grid_in, HeightGrid& height_grid_out, Point centroid);
   void RunICP(HeightGrid& first_height_grid, HeightGrid& second_height_grid);
+  void RunTestICP();
   Eigen::Matrix3d FindAlignment(HeightGrid& P, HeightGrid& Y);
 
   ///////////////////////////////////
@@ -106,6 +108,7 @@ class FeatureExtractor {
   void VisualizeLine(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines);
   void VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
   void VisualizeHeightGrid(HeightGrid& height_grid, int color);  // 0: red, 1: green
+  void VisualizeLineBetweenMatchingPoints(HeightGrid HG1, HeightGrid HG2);
   void VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid);
   ///////////////////////////////////
   ///////////////////////////////////
