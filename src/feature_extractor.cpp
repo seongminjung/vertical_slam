@@ -495,6 +495,65 @@ void FeatureExtractor::VisualizeLineBetweenMatchingPoints(HeightGrid HG1, Height
   }
 }
 
+void FeatureExtractor::VisualizeCentroid(Eigen::Vector2d centroid, time_t timestamp, int color) {
+  visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::Marker marker;
+
+  marker = visualization_msgs::Marker();
+  // Set the frame ID and timestamp.
+  marker.header.frame_id = "velo_link";
+  marker.header.stamp = ros::Time(timestamp);
+  // Set the namespace and id for this marker. This serves to create a unique ID Any marker sent with the same
+  // namespace and id will overwrite the old one
+  if (color == 0) {
+    marker.ns = "centroid_0";
+  } else if (color == 1) {
+    marker.ns = "centroid_1";
+  } else if (color == 2) {
+    marker.ns = "centroid_2";
+  }
+  marker.id = color;
+  // Set the marker type. Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
+  marker.type = visualization_msgs::Marker::SPHERE;
+  // Set the marker action. Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
+  marker.action = visualization_msgs::Marker::ADD;
+  // Set the pose of the marker. This is a full 6DOF pose relative to the frame/time specified in the header
+  marker.pose.position.x = centroid(0);
+  marker.pose.position.y = centroid(1);
+  marker.pose.position.z = -1.73;
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+
+  // Set the scale of the marker -- 1x1x1 here means 1m on a side
+  marker.scale.x = 0.1;
+  marker.scale.y = 0.1;
+  marker.scale.z = 0.1;
+
+  if (color == 0) {
+    marker.color.r = 1;
+    marker.color.g = 0;
+    marker.color.b = 0;
+  } else if (color == 1) {
+    marker.color.r = 0;
+    marker.color.g = 1;
+    marker.color.b = 0;
+  } else if (color == 2) {
+    marker.color.r = 0;
+    marker.color.g = 0;
+    marker.color.b = 1;
+  }
+
+  marker.color.a = 0.5;
+
+  marker.lifetime = ros::Duration();
+
+  marker_array.markers.push_back(marker);
+
+  height_grid_pub_.publish(marker_array);
+}
+
 void FeatureExtractor::VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid) {
   nav_msgs::OccupancyGrid grid = height_grid.ToOccupancyGrid();
   height_grid_occ_pub_.publish(grid);
@@ -557,7 +616,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   std::vector<std::pair<int, double>> dist_vector;  // <index of new_P, distance>
 
   int Nm = M.GetCells().size();
-  int Np = P.GetCells().size();
+  int Np = new_P.GetCells().size();
 
   // Start ICP Loop
   for (int iter = 0; iter < max_iter; iter++) {
@@ -773,6 +832,17 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
   result.block<2, 2>(0, 0) = R;
   result.block<2, 1>(0, 2) = t;
   result(2, 0) = err;
+
+  // Visualize centroid of X, Y, and converted X
+  VisualizeCentroid(Y_centroid, X_HG.GetTimestamp(), 0);
+  VisualizeCentroid(X_centroid, X_HG.GetTimestamp(), 1);
+  Eigen::Vector2d X_centroid_tf = R * X_centroid + t;
+  VisualizeCentroid(X_centroid_tf, X_HG.GetTimestamp(), 2);
+
+  // Print coordinates of each centroids
+  ROS_INFO("X_centroid: \n%f\n%f", X_centroid(0), X_centroid(1));
+  ROS_INFO("Y_centroid: \n%f\n%f", Y_centroid(0), Y_centroid(1));
+  ROS_INFO("X_centroid_tf: \n%f\n%f", X_centroid_tf(0), X_centroid_tf(1));
 
   return result;
 }

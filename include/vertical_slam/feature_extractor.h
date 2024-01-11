@@ -109,6 +109,7 @@ class FeatureExtractor {
   void VisualizeLineDensity(std::vector<std::pair<pcl::PointXYZ, pcl::PointXYZ>>& lines, double voxel_size);
   void VisualizeHeightGrid(HeightGrid& height_grid, int color);  // 0: red, 1: green
   void VisualizeLineBetweenMatchingPoints(HeightGrid HG1, HeightGrid HG2);
+  void VisualizeCentroid(Eigen::Vector2d centroid, time_t timestamp, int color);  // 0: red, 1: green, 2; blue
   void VisualizeHeightGridInOccupancyGrid(HeightGrid& height_grid);
   ///////////////////////////////////
   ///////////////////////////////////
