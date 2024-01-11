@@ -50,6 +50,10 @@ std::vector<Cell> HeightGrid::GetCells() { return cells_; }
 
 void HeightGrid::UpdateOneCell(unsigned int index, Cell cell) { cells_[index] = cell; }
 
+void HeightGrid::UpdateOneCellDisabled(unsigned int index, bool disabled) { cells_[index].disabled = disabled; }
+
+void HeightGrid::RemoveOneCell(unsigned int index) { cells_.erase(cells_.begin() + index); }
+
 Eigen::MatrixXd HeightGrid::ToEigenMatrix() {
   Eigen::MatrixXd matrix;
   matrix.resize(3, cells_.size());

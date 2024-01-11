@@ -18,8 +18,9 @@ struct Cell {
   double x;
   double y;
   double height;
+  bool disabled;
   Cell() {}
-  Cell(double x_, double y_, double height_) : x(x_), y(y_), height(height_) {}
+  Cell(double x_, double y_, double height_) : x(x_), y(y_), height(height_), disabled(false) {}
 };
 
 class HeightGrid {
@@ -52,6 +53,8 @@ class HeightGrid {
   std::vector<Cell> GetCells();
 
   void UpdateOneCell(unsigned int index, Cell cell);
+  void UpdateOneCellDisabled(unsigned int index, bool disabled);
+  void RemoveOneCell(unsigned int index);
 
   Eigen::MatrixXd ToEigenMatrix();
   nav_msgs::OccupancyGrid ToOccupancyGrid();

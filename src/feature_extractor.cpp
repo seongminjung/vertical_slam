@@ -357,6 +357,8 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid, int color) {
     double y = height_grid.GetCells()[i].y;
     double height = height_grid.GetCells()[i].height;
 
+    bool disabled = height_grid.GetCells()[i].disabled;
+
     marker = visualization_msgs::Marker();
     // Set the frame ID and timestamp.
     marker.header.frame_id = "velo_link";
@@ -405,6 +407,14 @@ void FeatureExtractor::VisualizeHeightGrid(HeightGrid& height_grid, int color) {
 
     marker.color.a = 0.5 * height;
 
+    // if disabled, make it yellow
+    if (disabled) {
+      marker.color.r = 1;
+      marker.color.g = 1;
+      marker.color.b = 0;
+      marker.color.a = 0.5;
+    }
+
     marker.lifetime = ros::Duration();
 
     marker_array.markers.push_back(marker);
@@ -428,6 +438,8 @@ void FeatureExtractor::VisualizeLineBetweenMatchingPoints(HeightGrid HG1, Height
     double x2 = cells2[i].x;
     double y2 = cells2[i].y;
     double height2 = cells2[i].height;
+
+    bool disabled = cells1[i].disabled;
 
     marker = visualization_msgs::Marker();
     // Set the frame ID and timestamp.
@@ -456,6 +468,14 @@ void FeatureExtractor::VisualizeLineBetweenMatchingPoints(HeightGrid HG1, Height
     marker.color.g = g / 255.0;
     marker.color.b = b / 255.0;
     marker.color.a = 0.5 * (height1 + height2);
+
+    // if disabled, make it yellow
+    if (disabled) {
+      marker.color.r = 1;
+      marker.color.g = 1;
+      marker.color.b = 0;
+      marker.color.a = 0.5;
+    }
 
     marker.lifetime = ros::Duration();
 
@@ -534,6 +554,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   HeightGrid new_P(P);                              // transformed P
   int max_iter = 200;
   double thresh = 1e-5;
+  std::vector<std::pair<int, double>> dist_vector;  // <index of new_P, distance>
 
   int Nm = M.GetCells().size();
   int Np = P.GetCells().size();
@@ -543,6 +564,13 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
     ROS_INFO("==========iter: %d==========", iter);
     HeightGrid Y;
     Y.ReserveCells(Np);
+    dist_vector.clear();
+    dist_vector.reserve(Np);
+
+    // Revoke height values
+    for (int i = 0; i < Np; i++) {
+      new_P.UpdateOneCellDisabled(i, false);
+    }
 
     // Find the nearest neighbor for each point in P
     for (int i = 0; i < Np; i++) {
@@ -559,11 +587,39 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
           }
         }
       }
+      dist_vector.emplace_back(i, min_dist);
       Y.AppendOneCell(M.GetCells()[min_idx]);
     }
 
+    // sort dist_vector by distance
+    std::sort(dist_vector.begin(), dist_vector.end(),
+              [](const std::pair<int, double>& a, const std::pair<int, double>& b) { return a.second > b.second; });
+
+    // Drop points with top 10% distance by making height zero
+    for (int i = 0; i < Np * 0.1; i++) {
+      new_P.UpdateOneCellDisabled(dist_vector[i].first, true);
+    }
+
+    // // if less than 80% of the pairs have distance < 0.01, drop the point with distance < 0.01 by making height zero
+    // // since it means overlapping
+    // int count = 0;
+    // for (int i = 0; i < Np; i++) {
+    //   if (dist_vector[i].second < 0.01) {
+    //     count++;
+    //   }
+    // }
+    // if (count < Np * 0.8) {
+    //   for (int i = 0; i < Np; i++) {
+    //     if (dist_vector[i].second < 0.01) {
+    //       new_P.UpdateOneCellDisabled(dist_vector[i].first, true);
+    //     }
+    //   }
+    // }
+
     // Visualize
     VisualizeLineBetweenMatchingPoints(new_P, Y);
+    // ros::Duration(1).sleep(); //Only for RunTestICP
+    VisualizeHeightGrid(new_P, 2);
 
     Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
 
@@ -579,12 +635,6 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
                     new_P.GetCells()[i].height);
       new_P.UpdateOneCell(i, new_cell);
     }
-
-    // pause for one second (Only for RunTestICP)
-    // ros::Duration(1).sleep();
-
-    // Visualize
-    VisualizeHeightGrid(new_P, 2);
 
     // Check for convergence
     if (err < thresh) {
@@ -660,10 +710,24 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
     ROS_ERROR("Need at least four pairs of points!");
   }
 
-  unsigned int N = X_HG.GetCells().size();
+  unsigned int N_og = X_HG.GetCells().size();
 
-  Eigen::MatrixXd X_matrix = X_HG.ToEigenMatrix();
-  Eigen::MatrixXd Y_matrix = Y_HG.ToEigenMatrix();
+  Eigen::MatrixXd X_matrix_og = X_HG.ToEigenMatrix();
+  Eigen::MatrixXd Y_matrix_og = Y_HG.ToEigenMatrix();
+
+  // Make new X and Y matrix without disabled cells
+  Eigen::MatrixXd X_matrix;
+  Eigen::MatrixXd Y_matrix;
+  for (int i = 0; i < N_og; i++) {
+    if (!X_HG.GetCells()[i].disabled) {
+      X_matrix.conservativeResize(3, X_matrix.cols() + 1);
+      X_matrix.col(X_matrix.cols() - 1) = X_matrix_og.col(i);
+      Y_matrix.conservativeResize(3, Y_matrix.cols() + 1);
+      Y_matrix.col(Y_matrix.cols() - 1) = Y_matrix_og.col(i);
+    }
+  }
+
+  unsigned int N = X_matrix.cols();
 
   // Seperate coordinates and height
   Eigen::MatrixXd X = X_matrix.block(0, 0, 2, N);
