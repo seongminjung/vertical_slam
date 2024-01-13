@@ -607,6 +607,8 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   /// \param P: incoming HeightGrid to be aligned
 
   // Initialization
+  Eigen::Matrix2d accumulated_R = Eigen::Matrix2d::Identity();  // rotation
+  Eigen::Vector2d accumulated_t = Eigen::Vector2d::Zero();      // translation
   Eigen::Matrix2d R = Eigen::Matrix2d::Identity();  // rotation
   Eigen::Vector2d t = Eigen::Vector2d::Zero();      // translation
   double err = 0;                                   // error
@@ -626,7 +628,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
     dist_vector.clear();
     dist_vector.reserve(Np);
 
-    // Revoke height values
+    // Revoke disabled status
     for (int i = 0; i < Np; i++) {
       new_P.UpdateOneCellDisabled(i, false);
     }
@@ -649,6 +651,23 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       dist_vector.emplace_back(i, min_dist);
       Y.AppendOneCell(M.GetCells()[min_idx]);
     }
+
+    // print histogram. x: distance, y: count
+    std::vector<int> hist(100, 0);
+
+    // fill with 0
+    for (int i = 0; i < hist.size(); i++) {
+      hist[i] = 0;
+    }
+
+    for (int i = 0; i < Np; i++) {
+      hist[std::min(99, int(dist_vector[i].second * 50))]++;
+    }
+
+    for (int i = 0; i < hist.size(); i++) {
+      std::cout << hist[i] << " ";
+    }
+    std::cout << std::endl;
 
     // sort dist_vector by distance
     std::sort(dist_vector.begin(), dist_vector.end(),
@@ -682,10 +701,20 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
     Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
 
+    std::cout << "R_raw: " << std::endl << result.block<2, 2>(0, 0) << std::endl;
+    std::cout << "t_raw: " << std::endl << result.block<2, 1>(0, 2) << std::endl;
+
     // Update R, t, err
     R = result.block<2, 2>(0, 0);
     t = result.block<2, 1>(0, 2);
+    accumulated_R = R * accumulated_R;
+    accumulated_t = R * accumulated_t + t;
     err = result(2, 0);
+
+    // Print R, t, err
+    std::cout << "R: " << std::endl << accumulated_R << std::endl;
+    std::cout << "t: " << std::endl << accumulated_t << std::endl;
+    std::cout << "err: " << std::endl << err << std::endl;
 
     // Update P and compute error
     for (int i = 0; i < Np; i++) {
@@ -807,25 +836,21 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
 
   // Compute the covariance matrix including height
   Eigen::Matrix2d H = X_demeaned * Height.asDiagonal() * Y_demeaned.transpose();
-  ROS_INFO("H: \n%f, %f\n%f, %f", H(0, 0), H(0, 1), H(1, 0), H(1, 1));
 
   // Compute the SVD of H
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Eigen::Matrix2d U = svd.matrixU();
   Eigen::Matrix2d V = svd.matrixV();
   Eigen::Matrix2d R = V * U.transpose();
-  ROS_INFO("R: \n%f, %f\n%f, %f", R(0, 0), R(0, 1), R(1, 0), R(1, 1));
+
   // get angle in degrees from rotation matrix r
   double angle = atan2(R(1, 0), R(0, 0)) * 180 / M_PI;
-  ROS_INFO("angle: %f", angle);
 
   // Compute the translation
   Eigen::Vector2d t = Y_centroid - R * X_centroid;
-  ROS_INFO("t: \n%f\n%f", t(0), t(1));
 
   // Compute the error
   double err = (Y_demeaned - R * X_demeaned).norm() / N;
-  ROS_INFO("err: %f", err);
 
   // Construct the result
   Eigen::Matrix3d result;
@@ -839,10 +864,10 @@ Eigen::Matrix3d FeatureExtractor::FindAlignment(HeightGrid& X_HG, HeightGrid& Y_
   Eigen::Vector2d X_centroid_tf = R * X_centroid + t;
   VisualizeCentroid(X_centroid_tf, X_HG.GetTimestamp(), 2);
 
-  // Print coordinates of each centroids
-  ROS_INFO("X_centroid: \n%f\n%f", X_centroid(0), X_centroid(1));
-  ROS_INFO("Y_centroid: \n%f\n%f", Y_centroid(0), Y_centroid(1));
-  ROS_INFO("X_centroid_tf: \n%f\n%f", X_centroid_tf(0), X_centroid_tf(1));
+  // // Print coordinates of each centroids
+  // ROS_INFO("X_centroid: \n%f\n%f", X_centroid(0), X_centroid(1));
+  // ROS_INFO("Y_centroid: \n%f\n%f", Y_centroid(0), Y_centroid(1));
+  // ROS_INFO("X_centroid_tf: \n%f\n%f", X_centroid_tf(0), X_centroid_tf(1));
 
   return result;
 }
