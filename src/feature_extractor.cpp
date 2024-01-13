@@ -14,6 +14,8 @@
 
 #include "vertical_slam/HeightGrid.h"
 
+#include <plotty/matplotlibcpp.hpp>
+
 void FeatureExtractor::ResetMarker() {
   visualization_msgs::MarkerArray marker_array;
   visualization_msgs::Marker deleteall_marker;
@@ -621,64 +623,12 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
   // Start ICP Loop
   for (int iter = 0; iter < max_iter; iter++) {
     ROS_INFO("==========iter: %d==========", iter);
-    HeightGrid Y;
-    Y.ReserveCells(Np);
-    dist_vector.clear();
-    dist_vector.reserve(Np);
-
-    // Revoke height values
-    for (int i = 0; i < Np; i++) {
-      new_P.UpdateOneCellDisabled(i, false);
-    }
-
-    // Find the nearest neighbor for each point in P
-    for (int i = 0; i < Np; i++) {
-      double min_dist = 1e10;
-      int min_idx = 0;
-      for (int j = 0; j < Nm; j++) {
-        double dist = sqrt(pow(new_P.GetCells()[i].x - M.GetCells()[j].x, 2) +
-                           pow(new_P.GetCells()[i].y - M.GetCells()[j].y, 2));  // Euclidean distance
-        if (dist < min_dist) {
-          // Update only when height is similar
-          if (abs(new_P.GetCells()[i].height - M.GetCells()[j].height) < 0.5) {
-            min_dist = dist;
-            min_idx = j;
-          }
-        }
-      }
-      dist_vector.emplace_back(i, min_dist);
-      Y.AppendOneCell(M.GetCells()[min_idx]);
-    }
-
-    // sort dist_vector by distance
-    std::sort(dist_vector.begin(), dist_vector.end(),
-              [](const std::pair<int, double>& a, const std::pair<int, double>& b) { return a.second > b.second; });
-
-    // Drop points with top 10% distance by making height zero
-    for (int i = 0; i < Np * 0.1; i++) {
-      new_P.UpdateOneCellDisabled(dist_vector[i].first, true);
-    }
-
-    // // if less than 80% of the pairs have distance < 0.01, drop the point with distance < 0.01 by making height zero
-    // // since it means overlapping
-    // int count = 0;
-    // for (int i = 0; i < Np; i++) {
-    //   if (dist_vector[i].second < 0.01) {
-    //     count++;
-    //   }
-    // }
-    // if (count < Np * 0.8) {
-    //   for (int i = 0; i < Np; i++) {
-    //     if (dist_vector[i].second < 0.01) {
-    //       new_P.UpdateOneCellDisabled(dist_vector[i].first, true);
-    //     }
-    //   }
-    // }
+    HeightGrid Y(M);
 
     // Visualize
+    ros::Duration(10).sleep();  // Only for RunTestICP
     VisualizeLineBetweenMatchingPoints(new_P, Y);
-    // ros::Duration(1).sleep(); //Only for RunTestICP
-    VisualizeHeightGrid(new_P, 2);
+    ros::Duration(10).sleep();  // Only for RunTestICP
 
     Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
 
@@ -695,6 +645,8 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       new_P.UpdateOneCell(i, new_cell);
     }
 
+    VisualizeHeightGrid(new_P, 2);
+
     // Check for convergence
     if (err < thresh) {
       VisualizeLineBetweenMatchingPoints(new_P, Y);
@@ -710,22 +662,24 @@ void FeatureExtractor::RunTestICP() {
   X.SetWidth(2);
   X.SetHeight(2);
   X.ReserveCells(4);
-  X.AppendOneCell(Cell(3, -5, 3));
-  X.AppendOneCell(Cell(2, -5, 3));
-  X.AppendOneCell(Cell(1, -4, 1));
+  X.AppendOneCell(Cell(3, -4, 1));
+  X.AppendOneCell(Cell(2, -4, 1));
   X.AppendOneCell(Cell(1, -3, 1));
-  X.AppendOneCell(Cell(2, -2, 2));
-  X.AppendOneCell(Cell(3, -2, 2));
-  X.AppendOneCell(Cell(4, -3, 1));
-  X.AppendOneCell(Cell(4, -4, 1));
-  X.AppendOneCell(Cell(3, 0, 3));
-  X.AppendOneCell(Cell(2, 0, 3));
-  X.AppendOneCell(Cell(1, 1, 1));
-  X.AppendOneCell(Cell(1, 2, 1));
-  X.AppendOneCell(Cell(2, 3, 2));
-  X.AppendOneCell(Cell(3, 3, 2));
-  X.AppendOneCell(Cell(4, 2, 1));
-  X.AppendOneCell(Cell(4, 1, 1));
+  X.AppendOneCell(Cell(1, -2, 1));
+  X.AppendOneCell(Cell(2, -1, 1));
+  // X.AppendOneCell(Cell(2, -2, 1));
+  // X.AppendOneCell(Cell(3, -2, 1));
+  // X.AppendOneCell(Cell(4, -3, 1));
+  // X.AppendOneCell(Cell(4, -4, 1));
+
+  // X.AppendOneCell(Cell(3, 0, 1));
+  // X.AppendOneCell(Cell(2, 0, 1));
+  // X.AppendOneCell(Cell(1, 1, 1));
+  // X.AppendOneCell(Cell(1, 2, 1));
+  // X.AppendOneCell(Cell(2, 3, 1));
+  // X.AppendOneCell(Cell(3, 3, 1));
+  // X.AppendOneCell(Cell(4, 2, 1));
+  // X.AppendOneCell(Cell(4, 1, 1));
   VisualizeHeightGrid(X, 1);
 
   HeightGrid Y;  // map
@@ -734,22 +688,24 @@ void FeatureExtractor::RunTestICP() {
   Y.SetWidth(2);
   Y.SetHeight(2);
   Y.ReserveCells(4);
-  Y.AppendOneCell(Cell(0, 0, 1));
-  Y.AppendOneCell(Cell(0, 1, 1));
-  Y.AppendOneCell(Cell(1, 2, 1));
+  Y.AppendOneCell(Cell(-1, 1, 1));
+  Y.AppendOneCell(Cell(-1, 2, 1));
+  Y.AppendOneCell(Cell(0, 3, 1));
+  Y.AppendOneCell(Cell(1, 3, 1));
   Y.AppendOneCell(Cell(2, 2, 1));
-  Y.AppendOneCell(Cell(3, 1, 3));
-  Y.AppendOneCell(Cell(3, 0, 3));
-  Y.AppendOneCell(Cell(2, -1, 1));
-  Y.AppendOneCell(Cell(1, -1, 1));
-  Y.AppendOneCell(Cell(5, 0, 1));
-  Y.AppendOneCell(Cell(5, 1, 1));
-  Y.AppendOneCell(Cell(6, 2, 1));
-  Y.AppendOneCell(Cell(7, 2, 1));
-  Y.AppendOneCell(Cell(8, 1, 3));
-  Y.AppendOneCell(Cell(8, 0, 3));
-  Y.AppendOneCell(Cell(7, -1, 1));
-  Y.AppendOneCell(Cell(6, -1, 1));
+  // Y.AppendOneCell(Cell(3, 1, 1));
+  // Y.AppendOneCell(Cell(3, 0, 1));
+  // Y.AppendOneCell(Cell(2, -1, 1));
+  // Y.AppendOneCell(Cell(1, -1, 1));
+
+  // Y.AppendOneCell(Cell(5, 0, 1));
+  // Y.AppendOneCell(Cell(5, 1, 1));
+  // Y.AppendOneCell(Cell(6, 2, 1));
+  // Y.AppendOneCell(Cell(7, 2, 1));
+  // Y.AppendOneCell(Cell(8, 1, 1));
+  // Y.AppendOneCell(Cell(8, 0, 1));
+  // Y.AppendOneCell(Cell(7, -1, 1));
+  // Y.AppendOneCell(Cell(6, -1, 1));
   VisualizeHeightGrid(Y, 0);
 
   RunICP(Y, X);

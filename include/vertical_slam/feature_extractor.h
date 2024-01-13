@@ -73,14 +73,8 @@ class FeatureExtractor {
 
     if (first_height_grid.GetCells().size() == 0) {
       first_height_grid = GetHeightGridFromLines(lines, voxel_size);
-      VisualizeHeightGrid(first_height_grid, 0);
-      // RunTestICP();
-    } else if (second_height_grid.GetCells().size() == 0) {
-      second_height_grid = GetHeightGridFromLines(lines, voxel_size);
-      VisualizeHeightGrid(second_height_grid, 1);
-      RunICP(first_height_grid, second_height_grid);
+      RunTestICP();
     }
-    // VisualizeHeightGridInOccupancyGrid(first_height_grid);
   }
 
   void SetIndexVector(pcl::PointCloud<pcl::PointXYZ>& input, double voxel_size);
