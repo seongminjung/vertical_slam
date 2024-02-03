@@ -622,6 +622,10 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
   // Start ICP Loop
   for (int iter = 0; iter < max_iter; iter++) {
+    if (!ros::ok()) {
+      break;
+    }
+
     ROS_INFO("==========iter: %d==========", iter);
     HeightGrid Y;
     Y.ReserveCells(Np);
@@ -652,22 +656,22 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
       Y.AppendOneCell(M.GetCells()[min_idx]);
     }
 
-    // print histogram. x: distance, y: count
-    std::vector<int> hist(100, 0);
+    // // print histogram. x: distance, y: count
+    // std::vector<int> hist(100, 0);
 
-    // fill with 0
-    for (int i = 0; i < hist.size(); i++) {
-      hist[i] = 0;
-    }
+    // // fill with 0
+    // for (int i = 0; i < hist.size(); i++) {
+    //   hist[i] = 0;
+    // }
 
-    for (int i = 0; i < Np; i++) {
-      hist[std::min(99, int(dist_vector[i].second * 50))]++;
-    }
+    // for (int i = 0; i < Np; i++) {
+    //   hist[std::min(99, int(dist_vector[i].second * 50))]++;
+    // }
 
-    for (int i = 0; i < hist.size(); i++) {
-      std::cout << hist[i] << " ";
-    }
-    std::cout << std::endl;
+    // for (int i = 0; i < hist.size(); i++) {
+    //   std::cout << hist[i] << " ";
+    // }
+    // std::cout << std::endl;
 
     // sort dist_vector by distance
     std::sort(dist_vector.begin(), dist_vector.end(),
@@ -696,7 +700,7 @@ void FeatureExtractor::RunICP(HeightGrid& M, HeightGrid& P) {
 
     // Visualize
     VisualizeLineBetweenMatchingPoints(new_P, Y);
-    // ros::Duration(1).sleep(); //Only for RunTestICP
+    ros::Duration(1).sleep();  // Only for RunTestICP
     VisualizeHeightGrid(new_P, 2);
 
     Eigen::Matrix3d result = FindAlignment(new_P, Y);  // left top 2x2: R, right top 2x1: t, left bottom 1x1: err
@@ -739,22 +743,22 @@ void FeatureExtractor::RunTestICP() {
   X.SetWidth(2);
   X.SetHeight(2);
   X.ReserveCells(4);
-  X.AppendOneCell(Cell(3, -5, 3));
-  X.AppendOneCell(Cell(2, -5, 3));
-  X.AppendOneCell(Cell(1, -4, 1));
+  X.AppendOneCell(Cell(3, -4, 1));
+  X.AppendOneCell(Cell(2, -4, 1));
   X.AppendOneCell(Cell(1, -3, 1));
-  X.AppendOneCell(Cell(2, -2, 2));
-  X.AppendOneCell(Cell(3, -2, 2));
-  X.AppendOneCell(Cell(4, -3, 1));
-  X.AppendOneCell(Cell(4, -4, 1));
-  X.AppendOneCell(Cell(3, 0, 3));
-  X.AppendOneCell(Cell(2, 0, 3));
-  X.AppendOneCell(Cell(1, 1, 1));
-  X.AppendOneCell(Cell(1, 2, 1));
-  X.AppendOneCell(Cell(2, 3, 2));
-  X.AppendOneCell(Cell(3, 3, 2));
-  X.AppendOneCell(Cell(4, 2, 1));
-  X.AppendOneCell(Cell(4, 1, 1));
+  X.AppendOneCell(Cell(1, -2, 1));
+  X.AppendOneCell(Cell(2, -1, 1));
+  // X.AppendOneCell(Cell(3, -2, 1));
+  // X.AppendOneCell(Cell(4, -3, 1));
+  // X.AppendOneCell(Cell(4, -4, 1));
+  // X.AppendOneCell(Cell(3, 0, 1));
+  // X.AppendOneCell(Cell(2, 0, 1));
+  // X.AppendOneCell(Cell(1, 1, 1));
+  // X.AppendOneCell(Cell(1, 2, 1));
+  // X.AppendOneCell(Cell(2, 3, 1));
+  // X.AppendOneCell(Cell(3, 3, 1));
+  // X.AppendOneCell(Cell(4, 2, 1));
+  // X.AppendOneCell(Cell(4, 1, 1));
   VisualizeHeightGrid(X, 1);
 
   HeightGrid Y;  // map
@@ -763,22 +767,22 @@ void FeatureExtractor::RunTestICP() {
   Y.SetWidth(2);
   Y.SetHeight(2);
   Y.ReserveCells(4);
-  Y.AppendOneCell(Cell(0, 0, 1));
-  Y.AppendOneCell(Cell(0, 1, 1));
-  Y.AppendOneCell(Cell(1, 2, 1));
+  Y.AppendOneCell(Cell(-1, 1, 1));
+  Y.AppendOneCell(Cell(-1, 2, 1));
+  Y.AppendOneCell(Cell(0, 3, 1));
+  Y.AppendOneCell(Cell(1, 3, 1));
   Y.AppendOneCell(Cell(2, 2, 1));
-  Y.AppendOneCell(Cell(3, 1, 3));
-  Y.AppendOneCell(Cell(3, 0, 3));
-  Y.AppendOneCell(Cell(2, -1, 1));
-  Y.AppendOneCell(Cell(1, -1, 1));
-  Y.AppendOneCell(Cell(5, 0, 1));
-  Y.AppendOneCell(Cell(5, 1, 1));
-  Y.AppendOneCell(Cell(6, 2, 1));
-  Y.AppendOneCell(Cell(7, 2, 1));
-  Y.AppendOneCell(Cell(8, 1, 3));
-  Y.AppendOneCell(Cell(8, 0, 3));
-  Y.AppendOneCell(Cell(7, -1, 1));
-  Y.AppendOneCell(Cell(6, -1, 1));
+  // Y.AppendOneCell(Cell(3, 0, 1));
+  // Y.AppendOneCell(Cell(2, -1, 1));
+  // Y.AppendOneCell(Cell(1, -1, 1));
+  // Y.AppendOneCell(Cell(5, 0, 1));
+  // Y.AppendOneCell(Cell(5, 1, 1));
+  // Y.AppendOneCell(Cell(6, 2, 1));
+  // Y.AppendOneCell(Cell(7, 2, 1));
+  // Y.AppendOneCell(Cell(8, 1, 1));
+  // Y.AppendOneCell(Cell(8, 0, 1));
+  // Y.AppendOneCell(Cell(7, -1, 1));
+  // Y.AppendOneCell(Cell(6, -1, 1));
   VisualizeHeightGrid(Y, 0);
 
   RunICP(Y, X);
